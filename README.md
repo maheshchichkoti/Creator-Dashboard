@@ -9,7 +9,7 @@ A full-stack MERN application enabling creators to manage their profile, earn cr
 - **Frontend (Render):** [YOUR_RENDER_FRONTEND_URL_HERE](#)
 - **Backend Health Check (Render):** [YOUR_RENDER_BACKEND_URL_HERE]/api/health
 
----
+---creator-dashboard
 
 ## 📋 Table of Contents
 

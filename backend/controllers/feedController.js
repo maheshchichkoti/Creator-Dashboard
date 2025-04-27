@@ -36,18 +36,20 @@ exports.getFeed = async (req, res, next) => {
             source: "Twitter",
           },
           {
-            title: "When you fix a bug after 6 hours of debugging... and it was a typo. 🤦‍♂️",
+            title:
+              "When you fix a bug after 6 hours of debugging... and it was a typo. 🤦‍♂️",
             url: "https://twitter.com/funnydev",
             source: "Twitter",
           },
           {
-            title: "Deploying on Friday? Bold move, Cotton. Let's see how it plays out. 😅",
+            title:
+              "Deploying on Friday? Bold move, Cotton. Let's see how it plays out. 😅",
             url: "https://twitter.com/devhumor",
             source: "Twitter",
           },
           {
-            title: "Me: I'll just make a small CSS change.  
-            Also me: Redesigns the entire website. 🎨",
+            title:
+              "Me: I'll just make a small CSS change. Also me: Redesigns the entire website. 🎨",
             url: "https://twitter.com/frontendfun",
             source: "Twitter",
           },
@@ -72,8 +74,8 @@ exports.getFeed = async (req, res, next) => {
             source: "Twitter",
           },
           {
-            title: "Junior Dev: 'Is this a bug or a feature?'  
-            Senior Dev: 'Yes.' 😎",
+            title:
+              "Junior Dev: 'Is this a bug or a feature?' Senior Dev: 'Yes.' 😎",
             url: "https://twitter.com/devjokes",
             source: "Twitter",
           },
@@ -82,7 +84,7 @@ exports.getFeed = async (req, res, next) => {
             url: "https://twitter.com/codingstruggles",
             source: "Twitter",
           },
-        ]
+        ],
       }),
       // Example: Hacker News Top Stories (requires another axios call)
       // axios.get('https://hacker-news.firebaseio.com/v0/topstories.json?limitToFirst=10&orderBy="$key"'),
