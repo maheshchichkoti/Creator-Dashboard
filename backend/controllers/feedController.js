@@ -35,11 +35,11 @@ const fallbackRedditPosts = [
 const fetchRedditPosts = async () => {
   try {
     const response = await axios.get(
-      "https://www.reddit.com/r/developersIndia/best.json?limit=20",
+      "https://www.reddit.com/r/StartUpIndia/best.json?limit=20",
       {
         timeout: 8000, // 8 second timeout
         headers: {
-          "User-Agent": "MyApp/1.0.0 (by /u/your_reddit_username)",
+          "User-Agent": "MyApp/1.0.0 (by /u/puddlethink)",
           Accept: "application/json",
           "Accept-Encoding": "gzip, deflate",
         },
