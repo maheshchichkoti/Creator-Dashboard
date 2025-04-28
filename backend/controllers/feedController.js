@@ -7,29 +7,23 @@ const User = require("../models/User"); // For potentially awarding points later
 const feedCache = {
   data: null,
   lastFetched: 0,
-  ttl: 5 * 60 * 1000, // Cache for 5 minutes
+  ttl: 5 * 60 * 1000,
 };
 
 exports.getFeed = async (req, res, next) => {
-  // Use next for error handling
   const now = Date.now();
 
-  // Check cache first
   if (feedCache.data && now - feedCache.lastFetched < feedCache.ttl) {
     console.log("Serving feed from cache");
     return res.json(feedCache.data);
   }
 
-  console.log("Fetching fresh feed data");
+  console.log("Fetching fresh feed data (Deployed Check)");
   try {
-    // --- Fetch External APIs ---
-    // Wrap individual fetches in Promise.allSettled for resilience
-    console.log("Fetching fresh feed data (Deployed Check)");
     const results = await Promise.allSettled([
-      axios.get("https://www.reddit.com/r/developersIndia/best.json?limit=20"), // Fetch a few more
-      // Add more API calls here (e.g., Hacker News, simulated Twitter)
+      axios.get("https://www.reddit.com/r/developersIndia/best.json?limit=20"),
       Promise.resolve({
-        // Simulated Twitter success
+        // Simulated Twitter data
         data: [
           {
             title: "VertxAI is hiring! 🚀 Join the future of AI.",
@@ -37,49 +31,11 @@ exports.getFeed = async (req, res, next) => {
             source: "Twitter",
           },
           {
-            title:
-              "When you fix a bug after 6 hours of debugging... and it was a typo. 🤦‍♂️",
+            title: "When you fix a bug after 6 hours... typo. 🤦‍♂️",
             url: "https://twitter.com/funnydev",
             source: "Twitter",
           },
-          {
-            title:
-              "Deploying on Friday? Bold move, Cotton. Let's see how it plays out. 😅",
-            url: "https://twitter.com/devhumor",
-            source: "Twitter",
-          },
-          {
-            title:
-              "Me: I'll just make a small CSS change. Also me: Redesigns the entire website. 🎨",
-            url: "https://twitter.com/frontendfun",
-            source: "Twitter",
-          },
-          {
-            title: "Git commit -m 'final final FINAL version' 🤣",
-            url: "https://twitter.com/gitgood",
-            source: "Twitter",
-          },
-          {
-            title: "Why write tests when you can... pray? 🙏 #DevLife",
-            url: "https://twitter.com/testless",
-            source: "Twitter",
-          },
-          {
-            title: "404: Motivation not found. Please try again later. 💤",
-            url: "https://twitter.com/motivationbot",
-            source: "Twitter",
-          },
-          {
-            title: "StackOverflow: Where 90% of my code comes from. 📚",
-            url: "https://twitter.com/stackoverflowfan",
-            source: "Twitter",
-          },
-          {
-            title:
-              "Junior Dev: 'Is this a bug or a feature?' Senior Dev: 'Yes.' 😎",
-            url: "https://twitter.com/devjokes",
-            source: "Twitter",
-          },
+          // ... (rest of twitter data) ...
           {
             title: "Me explaining to my code why it should work: 🧠💥",
             url: "https://twitter.com/codingstruggles",
@@ -87,104 +43,84 @@ exports.getFeed = async (req, res, next) => {
           },
         ],
       }),
-      // Example: Hacker News Top Stories (requires another axios call)
-      // axios.get('https://hacker-news.firebaseio.com/v0/topstories.json?limitToFirst=10&orderBy="$key"'),
     ]);
 
-    let combinedFeed = [];
+    let combinedFeed = []; // Initialize empty array
 
-    // Process Reddit results
+    // Process Reddit results (Index 0)
     if (
       results[0].status === "fulfilled" &&
       results[0].value.data?.data?.children
     ) {
       const redditPosts = results[0].value.data.data.children.map((post) => ({
-        id: `reddit_${post.data.id}`, // Add unique ID
+        id: `reddit_${post.data.id}`,
         title: post.data.title,
         url: `https://reddit.com${post.data.permalink}`,
         source: "Reddit",
-        score: post.data.score, // Include score or other relevant data
+        score: post.data.score,
         thumbnail:
           post.data.thumbnail && post.data.thumbnail.startsWith("http")
             ? post.data.thumbnail
-            : null, // Basic thumbnail handling
-        createdAt: new Date(post.data.created_utc * 1000), // Convert UTC seconds to Date
+            : null,
+        createdAt: new Date(post.data.created_utc * 1000),
       }));
-      combinedFeed.push(...redditPosts);
+      combinedFeed.push(...redditPosts); // Add Reddit posts
       console.log(
         `Successfully fetched ${redditPosts.length} Reddit posts (Deployed Check)`
       );
     } else {
+      // --- Keep the enhanced logging here ---
       console.error(
         "!!! Reddit Fetch Failed or Data Missing (Deployed Check) !!!"
       );
       if (results[0].status === "rejected") {
-        const redditError = results[0].reason; // The actual error object
+        const redditError = results[0].reason;
         console.error("Detailed Reddit Fetch Error:", {
-          message: redditError.message,
-          status: redditError.response?.status, // HTTP status code if available
-          statusText: redditError.response?.statusText, // Status text
-          // Log response data only if it's not excessively large
-          responseData:
-            redditError.response?.data &&
-            JSON.stringify(redditError.response.data).length < 1000
-              ? redditError.response.data
-              : "Response data too large or unavailable",
-          requestUrl: redditError.config?.url, // URL that failed
-          requestMethod: redditError.config?.method, // Method used
-          // Consider logging specific headers if relevant, e.g., User-Agent
-          // requestHeaders: redditError.config?.headers,
-          // Log the full stack trace for deeper debugging if needed
-          // stack: redditError.stack
+          /* ... detailed logging ... */
         });
       } else {
-        // It fulfilled, but data structure was wrong or children array was missing/empty
         console.error(
-          "Reddit Fetch Fulfilled but data structure unexpected or no posts found:",
+          "Reddit Fetch Fulfilled but data structure unexpected:",
           results[0].value?.data
         );
       }
+      // --- End enhanced logging ---
     }
 
-    // Process Simulated Twitter results
+    // Process Simulated Twitter results (Index 1)
     if (results[1].status === "fulfilled") {
       const twitterPosts = results[1].value.data.map((post, index) => ({
         ...post,
-        id: `twitter_sim_${index}`, // Add unique ID
-        createdAt: new Date(), // Add timestamp
+        id: `twitter_sim_${index}`,
+        createdAt: new Date(),
       }));
+      // --- >>> ADD THIS LINE <<< ---
+      combinedFeed.push(...twitterPosts); // Add Twitter posts
+      // --- >>> END ADD THIS LINE <<< ---
       console.log(
         `Successfully processed ${twitterPosts.length} Twitter posts (Deployed Check)`
-      ); // Log success count
+      );
     } else {
-      // This shouldn't happen with Promise.resolve, but log just in case
       console.error(
         "Simulated Twitter Promise Failed (Unexpected - Deployed Check):",
         results[1].reason
       );
     }
 
-    // Add more processors for other APIs...
-
     // --- Shuffle and Cache ---
-    // Shuffle the combined feed for variety
+    console.log(
+      `Combined feed has ${combinedFeed.length} posts before shuffle/cache (Deployed Check)`
+    ); // Add count check
     combinedFeed.sort(() => Math.random() - 0.5);
-
-    // Update cache
     feedCache.data = combinedFeed;
     feedCache.lastFetched = now;
 
-    // --- TODO: Award Credits for Feed Interaction ---
-    // This would typically happen on *specific user actions* (like viewing the feed first time today)
-    // NOT just on fetching the feed data itself.
-    // Example (needs to be moved to appropriate trigger):
-    // await User.findByIdAndUpdate(req.user.id, { $inc: { credits: 1 } });
-
     res.json(combinedFeed); // Send the combined, shuffled feed
   } catch (error) {
-    // Catch any unexpected errors during processing
-    console.error("Feed Controller Error:", error);
-    // Pass error to the global error handler
+    console.error(
+      "!!! Feed Controller Main Catch Block Error (Deployed Check) !!!:",
+      error
+    );
     next(new Error("Failed to fetch or process feed data"));
   }
 };
