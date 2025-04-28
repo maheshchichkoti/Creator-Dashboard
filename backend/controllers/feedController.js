@@ -24,6 +24,7 @@ exports.getFeed = async (req, res, next) => {
   try {
     // --- Fetch External APIs ---
     // Wrap individual fetches in Promise.allSettled for resilience
+    console.log("Fetching fresh feed data (Deployed Check)");
     const results = await Promise.allSettled([
       axios.get("https://www.reddit.com/r/developersIndia/best.json?limit=20"), // Fetch a few more
       // Add more API calls here (e.g., Hacker News, simulated Twitter)
@@ -110,11 +111,39 @@ exports.getFeed = async (req, res, next) => {
         createdAt: new Date(post.data.created_utc * 1000), // Convert UTC seconds to Date
       }));
       combinedFeed.push(...redditPosts);
+      console.log(
+        `Successfully fetched ${redditPosts.length} Reddit posts (Deployed Check)`
+      );
     } else {
       console.error(
-        "Failed to fetch Reddit posts:",
-        results[0].reason || "No data"
+        "!!! Reddit Fetch Failed or Data Missing (Deployed Check) !!!"
       );
+      if (results[0].status === "rejected") {
+        const redditError = results[0].reason; // The actual error object
+        console.error("Detailed Reddit Fetch Error:", {
+          message: redditError.message,
+          status: redditError.response?.status, // HTTP status code if available
+          statusText: redditError.response?.statusText, // Status text
+          // Log response data only if it's not excessively large
+          responseData:
+            redditError.response?.data &&
+            JSON.stringify(redditError.response.data).length < 1000
+              ? redditError.response.data
+              : "Response data too large or unavailable",
+          requestUrl: redditError.config?.url, // URL that failed
+          requestMethod: redditError.config?.method, // Method used
+          // Consider logging specific headers if relevant, e.g., User-Agent
+          // requestHeaders: redditError.config?.headers,
+          // Log the full stack trace for deeper debugging if needed
+          // stack: redditError.stack
+        });
+      } else {
+        // It fulfilled, but data structure was wrong or children array was missing/empty
+        console.error(
+          "Reddit Fetch Fulfilled but data structure unexpected or no posts found:",
+          results[0].value?.data
+        );
+      }
     }
 
     // Process Simulated Twitter results
@@ -124,9 +153,15 @@ exports.getFeed = async (req, res, next) => {
         id: `twitter_sim_${index}`, // Add unique ID
         createdAt: new Date(), // Add timestamp
       }));
-      combinedFeed.push(...twitterPosts);
+      console.log(
+        `Successfully processed ${twitterPosts.length} Twitter posts (Deployed Check)`
+      ); // Log success count
     } else {
-      console.error("Failed simulated Twitter fetch:", results[1].reason);
+      // This shouldn't happen with Promise.resolve, but log just in case
+      console.error(
+        "Simulated Twitter Promise Failed (Unexpected - Deployed Check):",
+        results[1].reason
+      );
     }
 
     // Add more processors for other APIs...

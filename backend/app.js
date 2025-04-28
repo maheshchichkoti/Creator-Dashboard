@@ -45,7 +45,13 @@ app.use(cookieParser());
 
 app.use(helmet());
 // --- API Routes ---
-
+app.get("/", (req, res) => {
+  res
+    .status(200)
+    .send(
+      "<h1>Creator Dashboard API</h1><p>API is running. Access API endpoints under /api/*</p>"
+    );
+});
 // Health Check Endpoint
 app.get("/api/health", (req, res) => {
   res.status(200).json({ status: "UP", message: "API is healthy" });

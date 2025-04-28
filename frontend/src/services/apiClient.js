@@ -5,28 +5,28 @@ import { toast } from "react-toastify";
 // Function to handle logout (avoids direct window manipulation deep in interceptor)
 const logoutUser = () => {
   localStorage.removeItem("token");
-  toast.error("Session expired. Please log in again.");
-  // Redirect after a short delay to allow toast to be seen
+  if (!toast.isActive("session-expired")) {
+    toast.error("Session expired. Please log in again.", {
+      toastId: "session-expired",
+    });
+  }
   setTimeout(() => {
-    // Use window.location for simplicity here, or emit an event for AuthContext
     window.location.href = "/login";
   }, 1500);
 };
 
 const apiClient = axios.create({
-  // Use Vite's environment variable syntax
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api",
   headers: {
     "Content-Type": "application/json",
   },
-  // IMPORTANT for sending HttpOnly cookies like the refresh token
   withCredentials: true,
 });
 
-// Request Interceptor: Adds the auth token to requests
+// Request Interceptor
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token"); // Get access token
+    const token = localStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -35,100 +35,153 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// --- Response Interceptor with Refresh Logic ---
+// --- RE-VERIFIED Response Interceptor with Refresh Logic ---
 
-let isRefreshing = false; // Flag to prevent multiple refresh attempts concurrently
-let failedQueue = []; // Queue to hold requests that failed while refreshing
+let isRefreshing = false;
+let failedQueue = [];
 
 const processQueue = (error, token = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error); // Reject promises if refresh failed
-    } else {
-      prom.resolve(token); // Resolve promises with new token if refresh succeeded
-    }
-  });
-  failedQueue = []; // Clear the queue
+  failedQueue.forEach((prom) =>
+    error ? prom.reject(error) : prom.resolve(token)
+  );
+  failedQueue = [];
 };
 
 apiClient.interceptors.response.use(
-  (response) => response, // Simply return successful responses
+  (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    // Check for 401 Unauthorized and ensure it's not a refresh token failure itself
-    if (
-      error.response?.status === 401 &&
-      originalRequest.url !== "/auth/refresh-token"
-    ) {
-      // If already refreshing, queue the original request
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            // Retry the original request with the new token from the successful refresh
-            originalRequest.headers["Authorization"] = "Bearer " + token;
-            return apiClient(originalRequest); // Re-run the original request
-          })
-          .catch((err) => {
-            return Promise.reject(err); // Propagate error if refresh failed
-          });
+    // --- Determine the request's path ---
+    let requestPath = "[Could not parse URL]";
+    try {
+      // originalRequest.url is usually relative to baseURL for apiClient calls
+      // For example, if baseURL is 'http://localhost:8000/api'
+      // and you call apiClient.post('/auth/login', ...),
+      // originalRequest.url will be '/auth/login'.
+      // We need to construct the full path if baseURL is present to be safe.
+      let fullPath;
+      if (originalRequest.baseURL && originalRequest.url.startsWith("/")) {
+        fullPath =
+          originalRequest.baseURL.replace(/\/$/, "") + originalRequest.url;
+      } else {
+        fullPath = originalRequest.url;
       }
+      requestPath = new URL(fullPath).pathname;
+    } catch (urlParseError) {
+      console.error(
+        "Interceptor: Could not parse URL for path extraction:",
+        originalRequest?.url,
+        urlParseError
+      );
+      requestPath =
+        typeof originalRequest?.url === "string"
+          ? originalRequest.url
+          : "[No URL]";
+    }
 
-      // Start the refresh process
-      originalRequest._retry = true; // Mark request as retried (optional)
-      isRefreshing = true;
+    // Define paths that should NOT trigger a refresh on 401
+    const noRefreshPaths = [
+      "/api/auth/login",
+      "/api/auth/refresh-token",
+      // Add '/api/auth/register' if you don't want refresh attempts there either
+    ];
 
-      try {
-        console.log("Attempting token refresh...");
-        // Make the refresh request - cookies (refreshToken) are sent automatically
-        const refreshResponse = await apiClient.get("/auth/refresh-token");
-        const { accessToken } = refreshResponse.data;
+    if (error.response?.status === 401) {
+      console.log(`Interceptor: Caught 401. Request path: "${requestPath}"`); // DEBUG
 
-        if (!accessToken) {
-          throw new Error("No access token received from refresh");
+      if (!noRefreshPaths.some((path) => requestPath.endsWith(path))) {
+        // 401 on a path NOT in noRefreshPaths (e.g., /api/user/dashboard) -> Attempt Refresh
+        console.log(
+          "Interceptor: Path is NOT login/refresh. Entering REFRESH logic."
+        );
+
+        if (isRefreshing) {
+          console.log("Interceptor: Already refreshing, queuing request.");
+          return new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          })
+            .then((token) => {
+              originalRequest.headers["Authorization"] = "Bearer " + token;
+              return apiClient(originalRequest);
+            })
+            .catch((err) => Promise.reject(err));
         }
 
-        console.log("Token refresh successful.");
-        localStorage.setItem("token", accessToken); // Store the new access token
+        originalRequest._retry = true;
+        isRefreshing = true;
 
-        // Apply the new token to the apiClient default headers for subsequent requests
-        apiClient.defaults.headers.common["Authorization"] =
-          "Bearer " + accessToken;
-        // Also apply to the original request's headers for the immediate retry
-        originalRequest.headers["Authorization"] = "Bearer " + accessToken;
+        try {
+          console.log(
+            "Interceptor: Attempting token refresh call (/api/auth/refresh-token)..."
+          );
+          const refreshResponse = await apiClient.get("/auth/refresh-token");
+          const { accessToken } = refreshResponse.data;
 
-        processQueue(null, accessToken); // Process queued requests with the new token
+          if (!accessToken) throw new Error("No access token from refresh");
 
-        return apiClient(originalRequest); // Retry the original request
-      } catch (refreshError) {
-        console.error("Token refresh failed:", refreshError);
-        processQueue(refreshError, null); // Reject queued requests
-        logoutUser(); // Logout if refresh fails
-        return Promise.reject(refreshError); // Reject the original error
-      } finally {
-        isRefreshing = false; // Reset refreshing state
+          console.log("Interceptor: Token refresh successful.");
+          localStorage.setItem("token", accessToken);
+          apiClient.defaults.headers.common["Authorization"] =
+            "Bearer " + accessToken;
+          originalRequest.headers["Authorization"] = "Bearer " + accessToken;
+
+          processQueue(null, accessToken);
+          console.log("Interceptor: Retrying original request to", requestPath);
+          return apiClient(originalRequest);
+        } catch (refreshError) {
+          console.error(
+            "Interceptor: Token refresh FAILED.",
+            refreshError.response?.data || refreshError.message
+          );
+          processQueue(refreshError, null);
+          logoutUser();
+          return Promise.reject(refreshError);
+        } finally {
+          isRefreshing = false;
+        }
+      } else if (requestPath.endsWith("/api/auth/login")) {
+        console.log(
+          "Interceptor: Path IS login. Propagating 401 (Invalid Credentials)."
+        );
+        // Let error propagate to AuthContext.login's catch block.
+      } else if (requestPath.endsWith("/api/auth/refresh-token")) {
+        console.log(
+          "Interceptor: Path IS refresh-token and it failed. Logging out."
+        );
+        // If the refresh token itself fails with 401/403, logout
+        processQueue(error, null); // Process queue with error if any requests were waiting
+        logoutUser();
+        // The Promise.reject at the end handles propagating this.
       }
     } else if (error.response) {
-      // Handle other common errors globally (optional additions)
-      console.error("API Error Response:", error.response);
-      if (error.response.status === 403) {
+      // Handle other status codes (403, 500, etc.)
+      console.error(
+        "API Error (Non-401):",
+        error.response.status,
+        requestPath,
+        error.response.data
+      );
+      if (
+        error.response.status === 403 &&
+        !requestPath.endsWith("/api/auth/refresh-token")
+      ) {
         toast.error("Access Denied: You don't have permission.");
       } else if (error.response.status === 500) {
-        toast.error("Server Error: Something went wrong on our end.");
+        toast.error("Server Error: Something went wrong.");
       }
-      // Allow component-level error handling to catch others
     } else if (error.request) {
-      console.error("API No Response:", error.request);
-      toast.error("Network Error: Could not reach the server.");
+      // Network error (no response)
+      console.error("API No Response:", requestPath, error.request);
+      if (!navigator.onLine) toast.warn("You appear to be offline.");
+      else toast.error("Network Error: Could not reach server.");
     } else {
+      // Request setup error
       console.error("API Request Setup Error:", error.message);
       toast.error("Error: Could not send request.");
     }
 
-    // IMPORTANT: Always reject the promise so component catches still work for non-401 errors
-    // or if refresh logic fails.
+    // ALWAYS reject the promise if it wasn't successfully handled by a retry
     return Promise.reject(error);
   }
 );
