@@ -6,28 +6,88 @@ const User = require("../models/User");
 const feedCache = {
   data: null,
   lastFetched: 0,
-  ttl: 5 * 60 * 1000,
+  ttl: 5 * 60 * 1000, // 5 minutes cache
+};
+
+// Fallback Reddit posts in case API fails
+const fallbackRedditPosts = [
+  {
+    id: "reddit_fallback_1",
+    title: "Check out r/developersIndia for developer discussions",
+    url: "https://www.reddit.com/r/developersIndia",
+    source: "Reddit",
+    score: 100,
+    thumbnail: null,
+    createdAt: new Date(),
+  },
+  {
+    id: "reddit_fallback_2",
+    title: "Join the developersIndia community on Reddit",
+    url: "https://www.reddit.com/r/developersIndia",
+    source: "Reddit",
+    score: 85,
+    thumbnail: null,
+    createdAt: new Date(Date.now() - 3600000),
+  },
+];
+
+// Helper function to fetch Reddit posts with proper headers and timeout
+const fetchRedditPosts = async () => {
+  try {
+    const response = await axios.get(
+      "https://www.reddit.com/r/developersIndia/best.json?limit=20",
+      {
+        timeout: 8000, // 8 second timeout
+        headers: {
+          "User-Agent": "MyApp/1.0.0 (by /u/your_reddit_username)",
+          Accept: "application/json",
+          "Accept-Encoding": "gzip, deflate",
+        },
+      }
+    );
+
+    if (response.data?.data?.children?.length > 0) {
+      return response.data.data.children.map((post) => ({
+        id: `reddit_${post.data.id}`,
+        title: post.data.title,
+        url: `https://reddit.com${post.data.permalink}`,
+        source: "Reddit",
+        score: post.data.score,
+        thumbnail: post.data.thumbnail?.startsWith("http")
+          ? post.data.thumbnail
+          : null,
+        createdAt: new Date(post.data.created_utc * 1000),
+      }));
+    }
+    return fallbackRedditPosts;
+  } catch (error) {
+    console.error("Reddit API Error:", {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      message: error.message,
+      config: {
+        url: error.config?.url,
+        method: error.config?.method,
+      },
+    });
+    return fallbackRedditPosts;
+  }
 };
 
 exports.getFeed = async (req, res, next) => {
   const now = Date.now();
 
+  // Serve from cache if available and valid
   if (feedCache.data && now - feedCache.lastFetched < feedCache.ttl) {
     console.log("Serving feed from cache");
     return res.json(feedCache.data);
   }
 
   console.log("Fetching fresh feed data (Deployed Check)");
+
   try {
     const results = await Promise.allSettled([
-      // Added User-Agent header attempt
-      axios.get("https://www.reddit.com/r/developersIndia/best.json?limit=20", {
-        timeout: 10000, // Added timeout (10 seconds)
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        },
-      }),
+      fetchRedditPosts(), // Using the new fetch function
       Promise.resolve({
         // Simulated Twitter data
         data: [
@@ -41,7 +101,6 @@ exports.getFeed = async (req, res, next) => {
             url: "https://twitter.com/funnydev",
             source: "Twitter",
           },
-          // ... (rest of twitter data) ...
           {
             title: "Me explaining to my code why it should work: 🧠💥",
             url: "https://twitter.com/codingstruggles",
@@ -51,92 +110,64 @@ exports.getFeed = async (req, res, next) => {
       }),
     ]);
 
-    let combinedFeed = []; // Initialize empty array
+    let combinedFeed = [];
 
     // Process Reddit results (Index 0)
-    if (
-      results[0].status === "fulfilled" &&
-      results[0].value.data?.data?.children?.length > 0 // Check length too
-    ) {
-      const redditPosts = results[0].value.data.data.children.map((post) => ({
-        id: `reddit_${post.data.id}`,
-        title: post.data.title,
-        url: `https://reddit.com${post.data.permalink}`,
-        source: "Reddit",
-        score: post.data.score,
-        thumbnail:
-          post.data.thumbnail && post.data.thumbnail.startsWith("http")
-            ? post.data.thumbnail
-            : null,
-        createdAt: new Date(post.data.created_utc * 1000),
-      }));
-      combinedFeed.push(...redditPosts);
-      console.log(
-        `Successfully fetched ${redditPosts.length} Reddit posts (Deployed Check)`
-      );
+    if (results[0].status === "fulfilled") {
+      combinedFeed.push(...results[0].value);
+      console.log(`Processed ${results[0].value.length} Reddit posts`);
     } else {
-      // --- >>> CORRECTED & DETAILED LOGGING BLOCK <<< ---
-      console.error(
-        "!!! Reddit Fetch Failed or Data Missing/Empty (Deployed Check) !!!"
-      );
-      if (results[0].status === "rejected") {
-        const redditError = results[0].reason; // Get the raw reason object
-        console.error("--- Raw Reddit Error Reason Object (if rejected) ---");
-        console.error(redditError); // Log the raw object
-        console.error("--- End Raw Reddit Error Reason Object ---");
-
-        console.error("Detailed Reddit Fetch Error Properties:", {
-          isAxiosError: redditError?.isAxiosError,
-          message: redditError?.message,
-          code: redditError?.code, // Important for network errors
-          status: redditError?.response?.status,
-          config_url: redditError?.config?.url,
-        });
-      } else {
-        // Status was 'fulfilled' but data structure was wrong or children array was empty
-        console.error(
-          "Reddit Fetch Fulfilled but data invalid or no posts found. Status:",
-          results[0].status,
-          "Value received:",
-          results[0].value // Log the whole value received
-        );
-      }
-      // --- >>> END CORRECTED & DETAILED LOGGING BLOCK <<< ---
+      console.error("Unexpected Reddit fetch rejection:", results[0].reason);
+      combinedFeed.push(...fallbackRedditPosts);
     }
 
-    // Process Simulated Twitter results (Index 1)
+    // Process Twitter results (Index 1)
     if (results[1].status === "fulfilled") {
       const twitterPosts = results[1].value.data.map((post, index) => ({
         ...post,
         id: `twitter_sim_${index}`,
         createdAt: new Date(),
       }));
-      combinedFeed.push(...twitterPosts); // Add Twitter posts
-      console.log(
-        `Successfully processed ${twitterPosts.length} Twitter posts (Deployed Check)`
-      );
+      combinedFeed.push(...twitterPosts);
+      console.log(`Processed ${twitterPosts.length} Twitter posts`);
     } else {
-      console.error(
-        "Simulated Twitter Promise Failed (Unexpected - Deployed Check):",
-        results[1].reason
-      );
+      console.error("Unexpected Twitter fetch rejection:", results[1].reason);
     }
 
-    // --- Shuffle and Cache ---
+    // Shuffle and cache the results
     console.log(
-      `Combined feed has ${combinedFeed.length} posts before shuffle/cache (Deployed Check)`
+      `Combined feed has ${combinedFeed.length} posts before shuffle`
     );
     combinedFeed.sort(() => Math.random() - 0.5);
+
+    // Update cache
     feedCache.data = combinedFeed;
     feedCache.lastFetched = now;
 
-    res.json(combinedFeed); // Send the combined, shuffled feed
+    res.json(combinedFeed);
   } catch (error) {
-    // Catch errors from Promise.allSettled or other processing steps
-    console.error(
-      "!!! Feed Controller Main Catch Block Error (Deployed Check) !!!:",
-      error
-    );
-    next(new Error("Failed to fetch or process feed data"));
+    console.error("Feed controller main error:", error);
+
+    // Try to serve from cache even if stale
+    if (feedCache.data) {
+      console.log("Falling back to stale cache due to error");
+      return res.json(feedCache.data);
+    }
+
+    // Ultimate fallback
+    const fallbackFeed = [...fallbackRedditPosts, ...twitterFallbackPosts];
+    res.json(fallbackFeed.sort(() => Math.random() - 0.5));
   }
 };
+
+// Twitter fallback data
+const twitterFallbackPosts = [
+  {
+    id: "twitter_fallback_1",
+    title: "VertxAI is hiring! 🚀 Join the future of AI.",
+    url: "https://twitter.com/vertxai",
+    source: "Twitter",
+    createdAt: new Date(),
+  },
+  // ... other fallback tweets ...
+];
