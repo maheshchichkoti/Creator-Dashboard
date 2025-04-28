@@ -21,7 +21,12 @@ exports.getFeed = async (req, res, next) => {
   console.log("Fetching fresh feed data (Deployed Check)");
   try {
     const results = await Promise.allSettled([
-      axios.get("https://www.reddit.com/r/developersIndia/best.json?limit=20"),
+      axios.get("https://www.reddit.com/r/developersIndia/best.json?limit=20", {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+      }),
       Promise.resolve({
         // Simulated Twitter data
         data: [
@@ -70,9 +75,15 @@ exports.getFeed = async (req, res, next) => {
       );
     } else {
       // --- Keep the enhanced logging here ---
-      console.error(
-        "!!! Reddit Fetch Failed or Data Missing (Deployed Check) !!!"
-      );
+      console.error("Detailed Reddit Fetch Error:", {
+        status: redditError.response?.status,
+        statusText: redditError.response?.statusText,
+        data: redditError.response?.data,
+        config: {
+          url: redditError.config?.url,
+          method: redditError.config?.method,
+        },
+      });
       if (results[0].status === "rejected") {
         const redditError = results[0].reason;
         console.error("Detailed Reddit Fetch Error:", {
