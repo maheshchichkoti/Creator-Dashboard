@@ -7,7 +7,7 @@ A full-stack MERN application enabling creators to manage their profile, earn cr
 ## 🚀 Live Demo Links
 
 - **Frontend (Render):** [https://creator-dashboard-test.onrender.com](https://creator-dashboard-test.onrender.com)
-- **Backend Health Check (Render):** [https://creator-dashboard-i8uo.onrender.com]/api/health
+- **Backend Health Check (Render):** https://creator-dashboard-i8uo.onrender.com/api/health
 
 ---creator-dashboard
 
