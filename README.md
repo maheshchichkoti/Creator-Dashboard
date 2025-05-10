@@ -4,7 +4,7 @@ A full-stack MERN application enabling creators to manage their profile, earn cr
 
 ---
 
-## 🚀 Live Demo Links
+## Live Demo Links
 
 - **Frontend (Render):** [YOUR_RENDER_FRONTEND_URL_HERE](#)
 - **Backend Health Check (Render):** [YOUR_RENDER_BACKEND_URL_HERE]/api/health
@@ -135,7 +135,7 @@ The application features distinct roles for regular users and administrators, pr
 
 ---
 
-## ✅ Prerequisites
+## Prerequisites
 
 - Node.js (v18.x or later)
 - npm or yarn
@@ -207,7 +207,7 @@ Frontend will run at: `http://localhost:5173`
 
 ---
 
-## 🚀 Deployment
+## Deployment
 
 This application is deployed on Render:
 

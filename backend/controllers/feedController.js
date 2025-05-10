@@ -175,7 +175,7 @@ const getTwitterPosts = () => {
     // Simulated Twitter data
     data: [
       {
-        title: "VertxAI is hiring! 🚀 Join the future of AI.",
+        title: "VertxAI is hiring!  Join the future of AI.",
         url: "https://twitter.com/vertxai",
         source: "Twitter",
       },
